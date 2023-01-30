@@ -1,0 +1,167 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: 'Automated deployment of QuickSight Assets.'
+
+Parameters:
+  pQuickSightUserNameArn:
+    Description: Enter the arn of the QuickSight Username.
+    Type: String
+
+Resources:
+  AccessAnalyzerFindingsDataSource:
+    Type: AWS::QuickSight::DataSource
+    Properties:
+      DataSourceId: !Sub 'access-analyzer-findings-data-source-${AWS::AccountId}'
+      Name: 'access-analyzer-findings-data-source'
+      AwsAccountId: !Ref AWS::AccountId
+      Type: ATHENA
+      DataSourceParameters:
+        AthenaParameters:
+          WorkGroup: 'access-analyzer-findings-workgroup-multi-account'
+      SslProperties:
+        DisableSsl: false
+
+  AccessAnalyzerFindingsDataSet:
+    Type: AWS::QuickSight::DataSet
+    Properties:
+      Permissions:
+        - Actions: 
+          - 'quicksight:UpdateDataSetPermissions'
+          - 'quicksight:DescribeDataSet'
+          - 'quicksight:DescribeDataSetPermissions'
+          - 'quicksight:PassDataSet'
+          - 'quicksight:DescribeIngestion'
+          - 'quicksight:ListIngestions'
+          - 'quicksight:UpdateDataSet'
+          - 'quicksight:DeleteDataSet'
+          - 'quicksight:CreateIngestion'
+          - 'quicksight:CancelIngestion'
+          Principal: !Ref pQuickSightUserNameArn
+      Name: 'access-analyzer-findings-data-set'
+      DataSetId: !Sub 'access-analyzer-findings-data-set-${AWS::AccountId}'
+      AwsAccountId: !Ref AWS::AccountId
+      PhysicalTableMap:
+          AccessAnalyzerFindingsTable:
+            RelationalTable:
+              Name: 'view_access_analyzer_finding'
+              Schema: 'access_analyzer_findings'
+              DataSourceArn: !GetAtt AccessAnalyzerFindingsDataSource.Arn
+              InputColumns:
+              - Name: policyarn
+                Type: STRING
+              - Name: policytype
+                Type: STRING
+              - Name: path
+                Type: STRING
+              - Name: policyid
+                Type: STRING
+              - Name: policyname
+                Type: STRING
+              - Name: latest_validatedat
+                Type: STRING
+              - Name: findingtype
+                Type: STRING
+              - Name: issuecode
+                Type: STRING
+              - Name: findingdetails
+                Type: STRING
+              - Name: learnmorelink
+                Type: STRING
+              - Name: latest_datehour
+                Type: STRING
+              - Name: accountid
+                Type: STRING
+      LogicalTableMap:
+          AccessAnalyzerFindingsLogicalTable:
+            Alias: 'view_access_analyzer_finding'
+            DataTransforms:
+              - CastColumnTypeOperation:
+                  ColumnName: 'latest_validatedat'
+                  NewColumnType: DATETIME
+                  Format: "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+              - CastColumnTypeOperation:
+                  ColumnName: 'latest_datehour'
+                  NewColumnType: DATETIME
+                  Format: "yyyy/MM/dd"
+              - ProjectOperation:
+                  ProjectedColumns:
+                    - 'policyarn'
+                    - 'policytype'
+                    - 'path'
+                    - 'policyid'
+                    - 'policyname'
+                    - 'latest_validatedat'
+                    - 'findingtype'
+                    - 'issuecode'
+                    - 'findingdetails'
+                    - 'learnmorelink'
+                    - 'latest_datehour'
+                    - 'accountid'
+            Source:
+              PhysicalTableId: AccessAnalyzerFindingsTable
+      ImportMode: DIRECT_QUERY
+
+  AccessAnalyzerFindingsTemplate:
+    Type: AWS::QuickSight::Template
+    Properties:
+      TemplateId: !Sub 'access-analyzer-findings-template-${AWS::AccountId}'
+      Name: 'access-analyzer-findings-template'
+      AwsAccountId: !Ref AWS::AccountId
+      SourceEntity:
+        SourceTemplate:
+          Arn: arn:aws:quicksight:eu-central-1:907413805921:template/shared-access-analyzer-findings-template-907413805921
+      
+      VersionDescription: Quicksight template copy of the shared access analyzer finding template.
+
+  AccessAnalyzerFindingsAnalysis:
+    Type: AWS::QuickSight::Analysis
+    Properties:
+      Permissions:
+        - Actions: 
+          - 'quicksight:RestoreAnalysis'
+          - 'quicksight:UpdateAnalysisPermissions'
+          - 'quicksight:DeleteAnalysis'
+          - 'quicksight:DescribeAnalysisPermissions'
+          - 'quicksight:QueryAnalysis'
+          - 'quicksight:DescribeAnalysis'
+          - 'quicksight:UpdateAnalysis'
+          Principal: !Ref pQuickSightUserNameArn
+      AnalysisId: !Sub 'access-analyzer-findings-analysis-${AWS::AccountId}'
+      Name: 'access-analyzer-validation-findings'
+      AwsAccountId: !Ref AWS::AccountId
+      SourceEntity:
+        SourceTemplate:
+          Arn: !GetAtt AccessAnalyzerFindingsTemplate.Arn
+          DataSetReferences:
+            - DataSetPlaceholder: AccessAnalyzerFindingsDataSet
+              DataSetArn: !GetAtt AccessAnalyzerFindingsDataSet.Arn
+      ThemeArn: 'arn:aws:quicksight::aws:theme/MIDNIGHT'
+
+  AccessAnalyzerFindingsDashboard:
+    Type: AWS::QuickSight::Dashboard
+    Properties:
+      Permissions:
+        - Actions: 
+          - 'quicksight:DescribeDashboard'
+          - 'quicksight:DescribeDashboard'
+          - 'quicksight:ListDashboardVersions'
+          - 'quicksight:UpdateDashboardPermissions'
+          - 'quicksight:QueryDashboard'
+          - 'quicksight:UpdateDashboard'
+          - 'quicksight:DeleteDashboard'
+          - 'quicksight:DescribeDashboardPermissions'
+          - 'quicksight:UpdateDashboardPublishedVersion'
+          Principal: !Ref pQuickSightUserNameArn
+      DashboardId: !Sub 'access-analyzer-findings-dashboard-${AWS::AccountId}'
+      Name: 'access-analyzer-findings-dashboard'
+      AwsAccountId: !Ref AWS::AccountId
+      SourceEntity:
+        SourceTemplate:
+          Arn: !GetAtt AccessAnalyzerFindingsTemplate.Arn
+          DataSetReferences:
+            - DataSetPlaceholder: AccessAnalyzerFindingsDataSet
+              DataSetArn: !GetAtt AccessAnalyzerFindingsDataSet.Arn
+      
+      ThemeArn: 'arn:aws:quicksight::aws:theme/MIDNIGHT'
+      DashboardPublishOptions:
+        AdHocFilteringOption:
+          AvailabilityStatus: DISABLED
