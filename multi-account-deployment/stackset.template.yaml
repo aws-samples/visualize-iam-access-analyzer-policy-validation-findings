@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Description: Deploys AWS resources to member accounts to list and send IAM policy documents to a central account for evaluation.
 
 Parameters:
@@ -15,16 +15,16 @@ Parameters:
     Default: 7
 
 Conditions:
-  IsSpokeAccountEqualToHubAccount: !Not 
+  IsSpokeAccountEqualToHubAccount: !Not
     - !Equals
       - !Sub
-        - '${HubAccount}'
+        - "${HubAccount}"
         - HubAccount: !Select
             - 3
             - !Split
               - /
               - !Ref pSQSQueueUrl
-      - !Ref 'AWS::AccountId'
+      - !Ref "AWS::AccountId"
 
 Resources:
   #################################################################################
@@ -44,7 +44,7 @@ Resources:
       Architectures:
         - x86_64
       Layers:
-        - !Sub 'arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPython:${pLambdaPowertoolsPythonVersion}'
+        - !Sub "arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPython:${pLambdaPowertoolsPythonVersion}"
       MemorySize: 1024
       Role: !GetAtt LambdaRoleListPolicies.Arn
       Handler: index.handler
@@ -141,8 +141,8 @@ Resources:
           SQS_QUEUE_URL: !Ref pSQSQueueUrl
           LOG_LEVEL: INFO
           POWERTOOLS_SERVICE_NAME: access_analyzer_list_policies
-      Description: !Sub 'Lambda function to list customer IAM policies and send them to the SQS queue ${pSQSQueueUrl}.'
-  LambdaFunctionListPoliciesDLQ: 
+      Description: !Sub "Lambda function to list customer IAM policies and send them to the SQS queue ${pSQSQueueUrl}."
+  LambdaFunctionListPoliciesDLQ:
     Condition: IsSpokeAccountEqualToHubAccount
     Type: AWS::SQS::Queue
     Metadata:
@@ -162,24 +162,23 @@ Resources:
             reason: "Serverlesss implementation. Does not require to be deployed in a VPC."
     Properties:
       ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
-        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole'
-      Path: /
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
+      Path: /access-analyzer/
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
           - Action:
-              - 'sts:AssumeRole'
+              - "sts:AssumeRole"
             Effect: Allow
             Principal:
               Service:
                 - lambda.amazonaws.com
       Policies:
-        - 
-         PolicyName: "ListIAMPolicyForAccessAnalyzer"
-         PolicyDocument:
-           Version: "2012-10-17"
-           Statement:
+        - PolicyName: "ListIAMPolicyForAccessAnalyzer"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
               - Effect: "Allow"
                 Action:
                   - "iam:GetPolicyVersion"
@@ -193,7 +192,7 @@ Resources:
                   - "iam:ListGroupPolicies"
                   - "iam:ListUserPolicies"
                   - "iam:ListRolePolicies"
-                Resource: 
+                Resource:
                   - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/*"
                   - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:group/*"
                   - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*"
@@ -208,23 +207,23 @@ Resources:
                 Action:
                   - "sqs:SendMessage"
                 Resource:
-                  - !Sub 
+                  - !Sub
                     - >-
                       arn:${AWS::Partition}:sqs:${AWS::Region}:${AccountId}:${QueueName}
-                    - QueueName: !Select 
+                    - QueueName: !Select
                         - 4
-                        - !Split 
+                        - !Split
                           - /
                           - !Ref pSQSQueueUrl
-                      AccountId: !Select 
+                      AccountId: !Select
                         - 3
-                        - !Split 
+                        - !Split
                           - /
                           - !Ref pSQSQueueUrl
                   - !GetAtt LambdaFunctionListPoliciesDLQ.Arn
   LambdaFunctionListLogGroup:
     Condition: IsSpokeAccountEqualToHubAccount
-    Type: 'AWS::Logs::LogGroup'
+    Type: "AWS::Logs::LogGroup"
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -232,7 +231,7 @@ Resources:
             reason: "No KMS key provided."
     Properties:
       RetentionInDays: 14
-      LogGroupName: !Sub '/aws/lambda/${LambdaFunctionListPolicies}'
+      LogGroupName: !Sub "/aws/lambda/${LambdaFunctionListPolicies}"
 
   ######################################
   #   AWS CloudWatch Events resources  #
@@ -243,20 +242,19 @@ Resources:
     Properties:
       Description: Scheduled event rule to validate IAM policies using IAM Access Analyzer.
       ScheduleExpression: "rate(12 hours)"
-      State:  "ENABLED"
+      State: "ENABLED"
       Targets:
-      - 
-        Arn: !GetAtt LambdaFunctionListPolicies.Arn
-        Id: "TargetLambdaFunctionListPolicies"
+        - Arn: !GetAtt LambdaFunctionListPolicies.Arn
+          Id: "TargetLambdaFunctionListPolicies"
 
   permissionForEventsToInvokeLambda:
     Condition: IsSpokeAccountEqualToHubAccount
     Type: AWS::Lambda::Permission
     Properties:
       FunctionName: !Ref LambdaFunctionListPolicies
-      Action:  "lambda:InvokeFunction"
-      Principal:  "events.amazonaws.com"
-      SourceArn: 
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn:
         Fn::GetAtt:
           - "scheduledRule"
           - "Arn"
